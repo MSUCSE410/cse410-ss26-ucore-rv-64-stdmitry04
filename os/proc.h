@@ -35,14 +35,17 @@ struct proc {
 	uint64 kstack; // Virtual address of kernel stack
 	struct trapframe *trapframe; // data page for trampoline.S
 	struct context context; // swtch() here to run process
-	/*
-	* LAB1: you may need to add some new fields here
-	*/
+
+	// new task info data
+	uint32 syscall_times[MAX_SYSCALL_NUM];
+	uint64 time;
 };
 
-/*
-* LAB1: you may need to define struct for TaskInfo here
-*/
+struct TaskInfo {
+	enum procstate state;
+	uint32 syscall_times[MAX_SYSCALL_NUM];
+	uint64 time;
+}
 
 struct proc *curr_proc();
 void exit(int);
