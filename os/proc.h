@@ -1,6 +1,6 @@
 #ifndef PROC_H
 #define PROC_H
-#define MAX_SYSCALL_NUM 20
+#define MAX_SYSCALL_NUM 500
 
 #include "types.h"
 
@@ -26,7 +26,14 @@ struct context {
 	uint64 s11;
 };
 
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { 
+    UNUSED = 0,   // Matches UnInit
+    RUNNABLE = 1, // Matches Ready
+    RUNNING = 2,  // Matches Running
+    ZOMBIE = 3,   // Matches Exited
+    USED = 4,     // Keep these for your kernel logic
+    SLEEPING = 5 
+};
 
 // Per-process state
 struct proc {
@@ -43,9 +50,9 @@ struct proc {
 };
 
 struct TaskInfo {
-	enum procstate state;
+	int status;
 	uint32 syscall_times[MAX_SYSCALL_NUM];
-	uint64 time;
+	int time;
 };
 
 struct proc *curr_proc();

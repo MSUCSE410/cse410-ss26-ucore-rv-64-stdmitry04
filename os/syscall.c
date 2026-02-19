@@ -44,8 +44,9 @@ uint64 sys_task_info(void)
     struct TaskInfo info;
     uint64 user_addr = p->trapframe->a0;
 
-    info.state = p->state;
-    info.time = r_time() - p->time;
+    info.status = p->state; 
+    
+    info.time = (get_cycle() / (CPU_FREQ / 1000)) - p->time;
     
     for(int i = 0; i < MAX_SYSCALL_NUM; i++) {
         info.syscall_times[i] = p->syscall_times[i];
@@ -85,8 +86,11 @@ void syscall()
 		ret = sys_gettimeofday((TimeVal *)args[0], args[1]);
 		break;
 	case SYS_task_info:
-		// ret = sys_task_info();
+		ret = sys_task_info();
 		break;
+	case SYS_getpid:
+    	ret = curr_proc()->pid;
+    	break;
 	default:
 		ret = -1;
 		errorf("unknown syscall %d", id);

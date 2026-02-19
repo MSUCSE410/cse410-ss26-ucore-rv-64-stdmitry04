@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "loader.h"
 #include "trap.h"
+#include "timer.h"
 
 struct proc pool[NPROC];
 char kstack[NPROC][PAGE_SIZE];
@@ -63,7 +64,7 @@ struct proc *allocproc(void)
 found:
 	p->pid = allocpid();
 	p->state = USED;
-	p->time = r_time();
+	p->time = 0;
 	memset(&p->context, 0, sizeof(p->context));
 	memset(p->trapframe, 0, PAGE_SIZE);
 	memset((void *)p->kstack, 0, PAGE_SIZE);
@@ -77,21 +78,21 @@ found:
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
-void scheduler(void)
-{
-	struct proc *p;
-	for (;;) {
-		for (p = pool; p < &pool[NPROC]; p++) {
-			if (p->state == RUNNABLE) {
-				// set the time if hasnt been set
-				// time settings moved to allocproc to avoid "if" checks millions of times per second
-				p->state = RUNNING;
-				current_proc = p;
-				swtch(&idle.context, &p->context);
+	void scheduler(void)
+	{
+		struct proc *p;
+		for (;;) {
+			for (p = pool; p < &pool[NPROC]; p++) {
+				if (p->state == RUNNABLE) {
+					if (p->time == 0)
+    					p->time = get_cycle() / (CPU_FREQ / 1000);
+					p->state = RUNNING;
+					current_proc = p;
+					swtch(&idle.context, &p->context);
+				}
 			}
 		}
 	}
-}
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
