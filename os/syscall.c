@@ -4,6 +4,8 @@
 #include "syscall_ids.h"
 #include "timer.h"
 #include "trap.h"
+#include "proc.h"
+#include "riscv.h"
 
 uint64 sys_write(int fd, char *str, uint len)
 {
@@ -36,9 +38,23 @@ uint64 sys_gettimeofday(TimeVal *val, int _tz)
 	return 0;
 }
 
-TaskInfo sys_task_info()
+uint64 sys_task_info(void)
 {
+    struct proc *p = curr_proc();
+    struct TaskInfo info;
+    uint64 user_addr = p->trapframe->a0;
 
+    info.state = p->state;
+    info.time = r_time() - p->time;
+    
+    for(int i = 0; i < MAX_SYSCALL_NUM; i++) {
+        info.syscall_times[i] = p->syscall_times[i];
+    }
+
+    struct TaskInfo *user_ptr = (struct TaskInfo *)user_addr;
+    *user_ptr = info;
+
+    return 0; 
 }
 
 extern char trap_page[];
@@ -46,7 +62,7 @@ extern char trap_page[];
 void syscall()
 {
 	struct trapframe *trapframe = curr_proc()->trapframe;
-	int id = trapframe->a7, ret;
+	int id = trapframe->a7, ret = 0;
 	uint64 args[6] = { trapframe->a0, trapframe->a1, trapframe->a2,
 			   trapframe->a3, trapframe->a4, trapframe->a5 };
 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],

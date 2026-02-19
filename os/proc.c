@@ -34,7 +34,7 @@ void proc_init(void)
 		for (int i = 0; i< MAX_SYSCALL_NUM; i++) {
 			p->syscall_times[i] = 0;
 		}
-		p->time = read_time();
+		p->time = r_time();
 	}
 	idle.kstack = (uint64)boot_stack_top;
 	idle.pid = 0;
@@ -63,7 +63,7 @@ struct proc *allocproc(void)
 found:
 	p->pid = allocpid();
 	p->state = USED;
-	p->time = read_time();
+	p->time = r_time();
 	memset(&p->context, 0, sizeof(p->context));
 	memset(p->trapframe, 0, PAGE_SIZE);
 	memset((void *)p->kstack, 0, PAGE_SIZE);

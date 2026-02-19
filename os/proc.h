@@ -1,5 +1,6 @@
 #ifndef PROC_H
 #define PROC_H
+#define MAX_SYSCALL_NUM 20
 
 #include "types.h"
 
@@ -45,7 +46,7 @@ struct TaskInfo {
 	enum procstate state;
 	uint32 syscall_times[MAX_SYSCALL_NUM];
 	uint64 time;
-}
+};
 
 struct proc *curr_proc();
 void exit(int);
