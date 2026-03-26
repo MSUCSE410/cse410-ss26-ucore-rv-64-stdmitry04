@@ -1,10 +1,17 @@
 #ifndef PROC_H
 #define PROC_H
+#define MAX_SYSCALL_NUM 500
 
 #include "riscv.h"
 #include "types.h"
 
 #define NPROC (16)
+
+struct TaskInfo {
+    int status;
+    uint32 syscall_times[MAX_SYSCALL_NUM];
+    int time;
+};
 
 // Saved registers for kernel context switches.
 struct context {

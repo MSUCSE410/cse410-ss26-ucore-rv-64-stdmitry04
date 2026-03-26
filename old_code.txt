@@ -1,0 +1,1178 @@
+diff --git a/.github/.keep b/.github/.keep
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/.github/classroom/autograding.json b/.github/classroom/autograding.json
+deleted file mode 100644
+index 535fc85..0000000
+--- a/.github/classroom/autograding.json
++++ /dev/null
+@@ -1,14 +0,0 @@
+-{
+-  "tests": [
+-    {
+-      "name": "run_os",
+-      "setup": "",
+-      "run": "make clean test BASE=0",
+-      "input": "",
+-      "output": "",
+-      "comparison": "included",
+-      "timeout": 15,
+-      "points": 100
+-    }
+-  ]
+-}
+diff --git a/.github/workflows/classroom.yml b/.github/workflows/classroom.yml
+deleted file mode 100644
+index 3228ffe..0000000
+--- a/.github/workflows/classroom.yml
++++ /dev/null
+@@ -1,67 +0,0 @@
+-name: GitHub Classroom Workflow
+-
+-on: [push]
+-
+-permissions:
+-  checks: write
+-  actions: read
+-  contents: read
+-
+-jobs:
+-  build:
+-    name: Autograding
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v3
+-      - name: Install  Riscv Toolchain
+-        run: |
+-          cd /usr/local
+-          sudo wget https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.08/riscv64-unknown-elf-gcc-10.1.0-2020.08.2-x86_64-linux-ubuntu14.tar.gz
+-          sudo tar xzf riscv64-unknown-elf-gcc-10.1.0-2020.08.2-x86_64-linux-ubuntu14.tar.gz
+-          sudo mv riscv64-unknown-elf-gcc-10.1.0-2020.08.2-x86_64-linux-ubuntu14 riscv64-unknown-elf-gcc
+-          sudo wget -O riscv64-linux-musl-cross.tgz https://github.com/MSUCSE410/msucse410-classroom-ss26-cse410-ss26-ucore-rv-64-uCore-RV-64/releases/download/toolchain-v2026.01/riscv64-linux-musl-cross.tgz
+-          sudo tar xzf riscv64-linux-musl-cross.tgz
+-      - name: Config Riscv Path   
+-        run: |
+-          sudo ln -s /usr/local/riscv64-unknown-elf-gcc/bin/* /usr/bin
+-          sudo ln -s /usr/local/riscv64-linux-musl-cross/bin/* /usr/bin
+-      - name: Install compile env
+-        run: |
+-          sudo apt install -y cmake
+-          sudo apt update -y
+-          sudo apt upgrade -y
+-          sudo apt install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev \
+-                        gawk build-essential bison flex texinfo gperf libtool patchutils bc \
+-                        zlib1g-dev libexpat-dev pkg-config  libglib2.0-dev libpixman-1-dev git tmux python3
+-      - name: Cache QEMU
+-        uses: actions/cache@v3
+-        with:
+-          path: qemu-5.0.0
+-          key: qemu-5.0.0-x86_64-riscv64
+-      - name: Install QEMU
+-        run: |
+-          if [ ! -d qemu-5.0.0 ]; then
+-            sudo wget https://download.qemu.org/qemu-5.0.0.tar.xz
+-            sudo tar xJf qemu-5.0.0.tar.xz
+-            cd qemu-5.0.0
+-            sudo ./configure --target-list=riscv64-softmmu,riscv64-linux-user
+-            sudo make -j$(nproc)
+-          else
+-            cd qemu-5.0.0
+-          fi
+-          sudo make install
+-          qemu-system-riscv64 --version
+-      - name: Config Path
+-        run: |
+-          sudo touch /home/.bashrc
+-          sudo chmod 777 /home/.bashrc
+-          sudo echo "export PATH=\"qemu-5.0.0:\$PATH\"" >> /home/.bashrc
+-          sudo echo "export PATH=\"qemu-5.0.0/riscv64-softmmu:\$PATH\"" >> /home/.bashrc
+-          sudo echo "export PATH=\"qemu-5.0.0/riscv64-linux-user:\$PATH\"" >> /home/.bashrc
+-          source /home/.bashrc
+-          qemu-system-riscv64 --version
+-          qemu-riscv64 --version
+-      - name: Clone user
+-        run: |
+-          git clone https://github.com/cse410/uCore-RV-64-test.git user
+-      - uses: education/autograding@v1
+diff --git a/README.md b/README.md
+index 98bdc53..871378e 100644
+--- a/README.md
++++ b/README.md
+@@ -2,7 +2,7 @@
+ 
+ Course project for CSE410-OS.
+ 
+-Reference [xv6-riscv](https://github.com/mit-pdos/xv6-riscv), [uCore-SMP](https://github.com/TianhuaTao/uCore-SMP).
++Reference xv6-riscv, uCore-SMP.
+ 
+ The start codes of lab1-lab5 are in branches ch3-ch8 respectively.
+ 
+diff --git a/cr-scripts b/cr-scripts
+deleted file mode 160000
+index eaba71a..0000000
+--- a/cr-scripts
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit eaba71a2484b3d1044bc00c93fd33eefadf452b2
+diff --git a/os/const.h b/os/const.h
+index fa56854..74096d6 100644
+--- a/os/const.h
++++ b/os/const.h
+@@ -9,4 +9,28 @@ enum {
+ 	STDERR = 2,
+ };
+ 
++// memory layout
++
++// the kernel expects there to be RAM
++// for use by the kernel and user pages
++// from physical address 0x80000000 to PHYSTOP.
++#define KERNBASE 0x80200000L
++#define PHYSTOP (0x80000000 + 128 * 1024 * 1024) // we have 128M memroy
++
++// one beyond the highest possible virtual address.
++// MAXVA is actually one bit less than the max allowed by
++// Sv39, to avoid having to sign-extend virtual addresses
++// that have the high bit set.
++#define MAXVA (1L << (9 + 9 + 9 + 12 - 1))
++
++// map the trampoline page to the highest address,
++// in both user and kernel space.
++#define USER_TOP (MAXVA)
++#define TRAMPOLINE (USER_TOP - PGSIZE)
++#define TRAPFRAME (TRAMPOLINE - PGSIZE)
++
++// memory layout end
++
++#define MAX_STR_LEN (200)
++
+ #endif // CONST_H
+\ No newline at end of file
+diff --git a/os/defs.h b/os/defs.h
+index af65c52..d0dbab2 100644
+--- a/os/defs.h
++++ b/os/defs.h
+@@ -2,6 +2,7 @@
+ #define DEFS_H
+ 
+ #include "const.h"
++#include "kalloc.h"
+ #include "log.h"
+ #include "printf.h"
+ #include "proc.h"
+@@ -9,6 +10,7 @@
+ #include "sbi.h"
+ #include "string.h"
+ #include "types.h"
++#include "vm.h"
+ 
+ // number of elements in fixed-size array
+ #define NELEM(x) (sizeof(x) / sizeof((x)[0]))
+diff --git a/os/kalloc.c b/os/kalloc.c
+new file mode 100644
+index 0000000..6f7012d
+--- /dev/null
++++ b/os/kalloc.c
+@@ -0,0 +1,57 @@
++#include "kalloc.h"
++#include "defs.h"
++#include "riscv.h"
++
++extern char ekernel[];
++
++struct linklist {
++	struct linklist *next;
++};
++
++struct {
++	struct linklist *freelist;
++} kmem;
++
++void freerange(void *pa_start, void *pa_end)
++{
++	char *p;
++	p = (char *)PGROUNDUP((uint64)pa_start);
++	for (; p + PGSIZE <= (char *)pa_end; p += PGSIZE)
++		kfree(p);
++}
++
++void kinit()
++{
++	freerange(ekernel, (void *)PHYSTOP);
++}
++
++// Free the page of physical memory pointed at by v,
++// which normally should have been returned by a
++// call to kalloc().  (The exception is when
++// initializing the allocator; see kinit above.)
++void kfree(void *pa)
++{
++	struct linklist *l;
++	if (((uint64)pa % PGSIZE) != 0 || (char *)pa < ekernel ||
++	    (uint64)pa >= PHYSTOP)
++		panic("kfree");
++	// Fill with junk to catch dangling refs.
++	memset(pa, 1, PGSIZE);
++	l = (struct linklist *)pa;
++	l->next = kmem.freelist;
++	kmem.freelist = l;
++}
++
++// Allocate one 4096-byte page of physical memory.
++// Returns a pointer that the kernel can use.
++// Returns 0 if the memory cannot be allocated.
++void *kalloc(void)
++{
++	struct linklist *l;
++	l = kmem.freelist;
++	if (l) {
++		kmem.freelist = l->next;
++		memset((char *)l, 5, PGSIZE); // fill with junk
++	}
++	return (void *)l;
++}
+\ No newline at end of file
+diff --git a/os/kalloc.h b/os/kalloc.h
+new file mode 100644
+index 0000000..c6936b6
+--- /dev/null
++++ b/os/kalloc.h
+@@ -0,0 +1,8 @@
++#ifndef KALLOC_H
++#define KALLOC_H
++
++void *kalloc(void);
++void kfree(void *);
++void kinit(void);
++
++#endif // KALLOC_H
+\ No newline at end of file
+diff --git a/os/loader.c b/os/loader.c
+index be9f10a..8dd830e 100644
+--- a/os/loader.c
++++ b/os/loader.c
+@@ -2,9 +2,9 @@
+ #include "defs.h"
+ #include "trap.h"
+ 
+-static uint64 app_num;
++static int app_num;
+ static uint64 *app_info_ptr;
+-extern char _app_num[], ekernel[];
++extern char _app_num[];
+ 
+ // Count finished programs. If all apps exited, shutdown.
+ int finished()
+@@ -18,22 +18,45 @@ int finished()
+ // Get user progs' infomation through pre-defined symbol in `link_app.S`
+ void loader_init()
+ {
+-	if ((uint64)ekernel >= BASE_ADDRESS) {
+-		panic("kernel too large...\n");
+-	}
+ 	app_info_ptr = (uint64 *)_app_num;
+ 	app_num = *app_info_ptr;
+ 	app_info_ptr++;
+ }
+ 
+-// Load nth user app at
+-// [BASE_ADDRESS + n * MAX_APP_SIZE, BASE_ADDRESS + (n+1) * MAX_APP_SIZE)
+-int load_app(int n, uint64 *info)
++pagetable_t bin_loader(uint64 start, uint64 end, struct proc *p)
+ {
+-	uint64 start = info[n], end = info[n + 1], length = end - start;
+-	memset((void *)BASE_ADDRESS + n * MAX_APP_SIZE, 0, MAX_APP_SIZE);
+-	memmove((void *)BASE_ADDRESS + n * MAX_APP_SIZE, (void *)start, length);
+-	return length;
++	pagetable_t pg = uvmcreate();
++	if (mappages(pg, TRAPFRAME, PGSIZE, (uint64)p->trapframe,
++		     PTE_R | PTE_W) < 0) {
++		panic("mappages fail");
++	}
++	if (!PGALIGNED(start)) {
++		panic("user program not aligned, start = %p", start);
++	}
++	if (!PGALIGNED(end)) {
++		// Fix in ch5
++		warnf("Some kernel data maybe mapped to user, start = %p, end = %p",
++		      start, end);
++	}
++	end = PGROUNDUP(end);
++	uint64 length = end - start;
++	if (mappages(pg, BASE_ADDRESS, length, start,
++		     PTE_U | PTE_R | PTE_W | PTE_X) != 0) {
++		panic("mappages fail");
++	}
++	p->pagetable = pg;
++	uint64 ustack_bottom_vaddr = BASE_ADDRESS + length + PAGE_SIZE;
++	if (USTACK_SIZE != PAGE_SIZE) {
++		// Fix in ch5
++		panic("Unsupported");
++	}
++	mappages(pg, ustack_bottom_vaddr, USTACK_SIZE, (uint64)kalloc(),
++		 PTE_U | PTE_R | PTE_W | PTE_X);
++	p->ustack = ustack_bottom_vaddr;
++	p->trapframe->epc = BASE_ADDRESS;
++	p->trapframe->sp = p->ustack + USTACK_SIZE;
++	p->max_page = PGROUNDUP(p->ustack + USTACK_SIZE - 1) / PAGE_SIZE;
++	return pg;
+ }
+ 
+ // load all apps and init the corresponding `proc` structure.
+@@ -41,12 +64,8 @@ int run_all_app()
+ {
+ 	for (int i = 0; i < app_num; ++i) {
+ 		struct proc *p = allocproc();
+-		struct trapframe *trapframe = p->trapframe;
+-		load_app(i, app_info_ptr);
+-		uint64 entry = BASE_ADDRESS + i * MAX_APP_SIZE;
+-		tracef("load app %d at %p", i, entry);
+-		trapframe->epc = entry;
+-		trapframe->sp = (uint64)p->ustack + USER_STACK_SIZE;
++		tracef("load app %d", i);
++		bin_loader(app_info_ptr[i], app_info_ptr[i + 1], p);
+ 		p->state = RUNNABLE;
+ 		/*
+ 		* LAB1: you may need to initialize your new fields of proc here
+diff --git a/os/loader.h b/os/loader.h
+index 37e0b2c..bdd8e29 100644
+--- a/os/loader.h
++++ b/os/loader.h
+@@ -8,9 +8,9 @@ int finished();
+ void loader_init();
+ int run_all_app();
+ 
+-#define BASE_ADDRESS (0x80400000)
+-#define MAX_APP_SIZE (0x20000)
+-#define USER_STACK_SIZE (PAGE_SIZE)
++#define BASE_ADDRESS (0x1000)
++#define USTACK_SIZE (PAGE_SIZE)
++#define KSTACK_SIZE (PAGE_SIZE)
+ #define TRAP_PAGE_SIZE (PAGE_SIZE)
+ 
+ #endif // LOADER_H
+\ No newline at end of file
+diff --git a/os/main.c b/os/main.c
+index 1b3f7ec..714ab28 100644
+--- a/os/main.c
++++ b/os/main.c
+@@ -14,11 +14,14 @@ void clean_bss()
+ void main()
+ {
+ 	clean_bss();
++	printf("hello world!\n");
+ 	proc_init();
++	kinit();
++	kvm_init();
+ 	loader_init();
+ 	trap_init();
+ 	timer_init();
+ 	run_all_app();
+ 	infof("start scheduler!");
+ 	scheduler();
+-}
++}
+\ No newline at end of file
+diff --git a/os/proc.c b/os/proc.c
+index 304684d..31875e8 100644
+--- a/os/proc.c
++++ b/os/proc.c
+@@ -2,12 +2,11 @@
+ #include "defs.h"
+ #include "loader.h"
+ #include "trap.h"
+-#include "timer.h"
++#include "vm.h"
+ 
+ struct proc pool[NPROC];
+-char kstack[NPROC][PAGE_SIZE];
+-__attribute__((aligned(4096))) char ustack[NPROC][PAGE_SIZE];
+-__attribute__((aligned(4096))) char trapframe[NPROC][PAGE_SIZE];
++__attribute__((aligned(16))) char kstack[NPROC][PAGE_SIZE];
++__attribute__((aligned(4096))) char trapframe[NPROC][TRAP_PAGE_SIZE];
+ 
+ extern char boot_stack_top[];
+ struct proc *current_proc;
+@@ -30,12 +29,10 @@ void proc_init(void)
+ 	for (p = pool; p < &pool[NPROC]; p++) {
+ 		p->state = UNUSED;
+ 		p->kstack = (uint64)kstack[p - pool];
+-		p->ustack = (uint64)ustack[p - pool];
+ 		p->trapframe = (struct trapframe *)trapframe[p - pool];
+-		for (int i = 0; i< MAX_SYSCALL_NUM; i++) {
+-			p->syscall_times[i] = 0;
+-		}
+-		p->time = r_time();
++		/*
++		* LAB1: you may need to initialize your new fields of proc here
++		*/
+ 	}
+ 	idle.kstack = (uint64)boot_stack_top;
+ 	idle.pid = 0;
+@@ -64,12 +61,14 @@ struct proc *allocproc(void)
+ found:
+ 	p->pid = allocpid();
+ 	p->state = USED;
+-	p->time = 0;
++	p->pagetable = 0;
++	p->ustack = 0;
++	p->max_page = 0;
+ 	memset(&p->context, 0, sizeof(p->context));
+-	memset(p->trapframe, 0, PAGE_SIZE);
+-	memset((void *)p->kstack, 0, PAGE_SIZE);
++	memset((void *)p->kstack, 0, KSTACK_SIZE);
++	memset((void *)p->trapframe, 0, TRAP_PAGE_SIZE);
+ 	p->context.ra = (uint64)usertrapret;
+-	p->context.sp = p->kstack + PAGE_SIZE;
++	p->context.sp = p->kstack + KSTACK_SIZE;
+ 	return p;
+ }
+ 
+@@ -78,21 +77,22 @@ found:
+ //  - swtch to start running that process.
+ //  - eventually that process transfers control
+ //    via swtch back to the scheduler.
+-	void scheduler(void)
+-	{
+-		struct proc *p;
+-		for (;;) {
+-			for (p = pool; p < &pool[NPROC]; p++) {
+-				if (p->state == RUNNABLE) {
+-					if (p->time == 0)
+-    					p->time = get_cycle() / (CPU_FREQ / 1000);
+-					p->state = RUNNING;
+-					current_proc = p;
+-					swtch(&idle.context, &p->context);
+-				}
++void scheduler(void)
++{
++	struct proc *p;
++	for (;;) {
++		for (p = pool; p < &pool[NPROC]; p++) {
++			if (p->state == RUNNABLE) {
++				/*
++				* LAB1: you may need to init proc start time here
++				*/
++				p->state = RUNNING;
++				current_proc = p;
++				swtch(&idle.context, &p->context);
+ 			}
+ 		}
+ 	}
++}
+ 
+ // Switch to scheduler.  Must hold only p->lock
+ // and have changed proc->state. Saves and restores
+@@ -116,12 +116,18 @@ void yield(void)
+ 	sched();
+ }
+ 
++void freeproc(struct proc *p)
++{
++	p->state = UNUSED;
++	// uvmfree(p->pagetable, p->max_page);
++}
++
+ // Exit the current process.
+ void exit(int code)
+ {
+ 	struct proc *p = curr_proc();
+ 	infof("proc %d exit with %d", p->pid, code);
+-	p->state = UNUSED;
++	freeproc(p);
+ 	finished();
+ 	sched();
+ }
+diff --git a/os/proc.h b/os/proc.h
+index ff40752..01d4834 100644
+--- a/os/proc.h
++++ b/os/proc.h
+@@ -1,7 +1,7 @@
+ #ifndef PROC_H
+ #define PROC_H
+-#define MAX_SYSCALL_NUM 500
+ 
++#include "riscv.h"
+ #include "types.h"
+ 
+ #define NPROC (16)
+@@ -26,34 +26,26 @@ struct context {
+ 	uint64 s11;
+ };
+ 
+-enum procstate { 
+-    UNUSED = 0,   // Matches UnInit
+-    RUNNABLE = 1, // Matches Ready
+-    RUNNING = 2,  // Matches Running
+-    ZOMBIE = 3,   // Matches Exited
+-    USED = 4,     // Keep these for your kernel logic
+-    SLEEPING = 5 
+-};
++enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+ 
+ // Per-process state
+ struct proc {
+ 	enum procstate state; // Process state
+ 	int pid; // Process ID
+-	uint64 ustack; // Virtual address of user stack
++	pagetable_t pagetable; // User page table
++	uint64 ustack;
+ 	uint64 kstack; // Virtual address of kernel stack
+ 	struct trapframe *trapframe; // data page for trampoline.S
+ 	struct context context; // swtch() here to run process
+-
+-	// new task info data
+-	uint32 syscall_times[MAX_SYSCALL_NUM];
+-	uint64 time;
++	uint64 max_page;
++	/*
++	* LAB1: you may need to add some new fields here
++	*/
+ };
+ 
+-struct TaskInfo {
+-	int status;
+-	uint32 syscall_times[MAX_SYSCALL_NUM];
+-	int time;
+-};
++/*
++* LAB1: you may need to define struct for TaskInfo here
++*/
+ 
+ struct proc *curr_proc();
+ void exit(int);
+diff --git a/os/riscv.h b/os/riscv.h
+index ba2fdbf..affaeef 100644
+--- a/os/riscv.h
++++ b/os/riscv.h
+@@ -291,6 +291,7 @@ static inline void sfence_vma()
+ 
+ #define PGROUNDUP(sz) (((sz) + PGSIZE - 1) & ~(PGSIZE - 1))
+ #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE - 1))
++#define PGALIGNED(a) (((a) & (PGSIZE - 1)) == 0)
+ 
+ #define PTE_V (1L << 0) // valid
+ #define PTE_R (1L << 1)
+@@ -317,6 +318,7 @@ static inline void sfence_vma()
+ #define MAXVA (1L << (9 + 9 + 9 + 12 - 1))
+ 
+ typedef uint64 pte_t;
++typedef uint64 pde_t;
+ typedef uint64 *pagetable_t; // 512 PTEs
+ 
+ #endif // RISCV_H
+\ No newline at end of file
+diff --git a/os/syscall.c b/os/syscall.c
+index 87bef65..7d7afe6 100644
+--- a/os/syscall.c
++++ b/os/syscall.c
+@@ -4,18 +4,20 @@
+ #include "syscall_ids.h"
+ #include "timer.h"
+ #include "trap.h"
+-#include "proc.h"
+-#include "riscv.h"
+ 
+-uint64 sys_write(int fd, char *str, uint len)
++uint64 sys_write(int fd, uint64 va, uint len)
+ {
+-	debugf("sys_write fd = %d str = %x, len = %d", fd, str, len);
++	debugf("sys_write fd = %d va = %x, len = %d", fd, va, len);
+ 	if (fd != STDOUT)
+ 		return -1;
+-	for (int i = 0; i < len; ++i) {
++	struct proc *p = curr_proc();
++	char str[MAX_STR_LEN];
++	int size = copyinstr(p->pagetable, str, va, MIN(len, MAX_STR_LEN));
++	debugf("size = %d", size);
++	for (int i = 0; i < size; ++i) {
+ 		console_putchar(str[i]);
+ 	}
+-	return len;
++	return size;
+ }
+ 
+ __attribute__((noreturn)) void sys_exit(int code)
+@@ -30,51 +32,43 @@ uint64 sys_sched_yield()
+ 	return 0;
+ }
+ 
+-uint64 sys_gettimeofday(TimeVal *val, int _tz)
++uint64 sys_gettimeofday(TimeVal *val, int _tz) // TODO: implement sys_gettimeofday in pagetable. (VA to PA)
+ {
+-	uint64 cycle = get_cycle();
+-	val->sec = cycle / CPU_FREQ;
+-	val->usec = (cycle % CPU_FREQ) * 1000000 / CPU_FREQ;
+-	return 0;
+-}
+-
+-uint64 sys_task_info(void)
+-{
+-    struct proc *p = curr_proc();
+-    struct TaskInfo info;
+-    uint64 user_addr = p->trapframe->a0;
+-
+-    info.status = p->state; 
+-    
+-    info.time = (get_cycle() / (CPU_FREQ / 1000)) - p->time;
+-    
+-    for(int i = 0; i < MAX_SYSCALL_NUM; i++) {
+-        info.syscall_times[i] = p->syscall_times[i];
+-    }
++	// YOUR CODE
++	val->sec = 0;
++	val->usec = 0;
+ 
+-    struct TaskInfo *user_ptr = (struct TaskInfo *)user_addr;
+-    *user_ptr = info;
++	/* The code in `ch3` will leads to memory bugs*/
+ 
+-    return 0; 
++	// uint64 cycle = get_cycle();
++	// val->sec = cycle / CPU_FREQ;
++	// val->usec = (cycle % CPU_FREQ) * 1000000 / CPU_FREQ;
++	return 0;
+ }
+ 
++// TODO: add support for mmap and munmap syscall.
++// hint: read through docstrings in vm.c. Watching CH4 video may also help.
++// Note the return value and PTE flags (especially U,X,W,R)
++/*
++* LAB1: you may need to define sys_task_info here
++*/
++
+ extern char trap_page[];
+ 
+ void syscall()
+ {
+ 	struct trapframe *trapframe = curr_proc()->trapframe;
+-	int id = trapframe->a7, ret = 0;
++	int id = trapframe->a7, ret;
+ 	uint64 args[6] = { trapframe->a0, trapframe->a1, trapframe->a2,
+ 			   trapframe->a3, trapframe->a4, trapframe->a5 };
+ 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],
+ 	       args[1], args[2], args[3], args[4], args[5]);
+-
+-	// update num of syscalls
+-	curr_proc()->syscall_times[id]++;
+-
++	/*
++	* LAB1: you may need to update syscall counter for task info here
++	*/
+ 	switch (id) {
+ 	case SYS_write:
+-		ret = sys_write(args[0], (char *)args[1], args[2]);
++		ret = sys_write(args[0], args[1], args[2]);
+ 		break;
+ 	case SYS_exit:
+ 		sys_exit(args[0]);
+@@ -85,12 +79,9 @@ void syscall()
+ 	case SYS_gettimeofday:
+ 		ret = sys_gettimeofday((TimeVal *)args[0], args[1]);
+ 		break;
+-	case SYS_task_info:
+-		ret = sys_task_info();
+-		break;
+-	case SYS_getpid:
+-    	ret = curr_proc()->pid;
+-    	break;
++	/*
++	* LAB1: you may need to add SYS_taskinfo case here
++	*/
+ 	default:
+ 		ret = -1;
+ 		errorf("unknown syscall %d", id);
+diff --git a/os/syscall_ids.h b/os/syscall_ids.h
+index 422f3db..0a1b397 100644
+--- a/os/syscall_ids.h
++++ b/os/syscall_ids.h
+@@ -277,7 +277,9 @@
+ #define SYS_io_pgetevents 292
+ #define SYS_rseq 293
+ #define SYS_kexec_file_load 294
+-#define SYS_task_info 410
++/*
++* LAB1: you may need to define SYS_task_info here
++*/
+ #define SYS_pidfd_send_signal 424
+ #define SYS_io_uring_setup 425
+ #define SYS_io_uring_enter 426
+diff --git a/os/timer.h b/os/timer.h
+index d577a39..217da4f 100644
+--- a/os/timer.h
++++ b/os/timer.h
+@@ -11,7 +11,7 @@ uint64 get_cycle();
+ void timer_init();
+ void set_next_timer();
+ 
+-typedef struct {
++typedef struct { // How to process structures in VA?
+ 	uint64 sec; // 自 Unix 纪元起的秒数
+ 	uint64 usec; // 微秒数
+ } TimeVal;
+diff --git a/os/trampoline.S b/os/trampoline.S
+index 00b1b96..7af374b 100644
+--- a/os/trampoline.S
++++ b/os/trampoline.S
+@@ -8,7 +8,7 @@
+ 	# kernel.ld causes this to be aligned
+         # to a page boundary.
+         #
+-    .section .text
++	.section trampsec
+ .globl trampoline
+ trampoline:
+ .align 4
+@@ -60,19 +60,16 @@ uservec:
+         sd t5, 272(a0)
+         sd t6, 280(a0)
+ 
+-	    # save the user a0 in p->trapframe->a0
+         csrr t0, sscratch
+         sd t0, 112(a0)
+-
+         csrr t1, sepc
+         sd t1, 24(a0)
+-
+         ld sp, 8(a0)
+         ld tp, 32(a0)
+-        ld t1, 0(a0)
+-        # csrw satp, t1
+-        # sfence.vma zero, zero
+         ld t0, 16(a0)
++        ld t1, 0(a0)
++        csrw satp, t1
++        sfence.vma zero, zero
+         jr t0
+ 
+ .globl userret
+diff --git a/os/trap.c b/os/trap.c
+index c051c37..173f944 100644
+--- a/os/trap.c
++++ b/os/trap.c
+@@ -5,19 +5,19 @@
+ #include "timer.h"
+ 
+ extern char trampoline[], uservec[];
+-extern void *userret(uint64);
++extern char userret[];
+ 
+ void kerneltrap()
+ {
+ 	if ((r_sstatus() & SSTATUS_SPP) == 0)
+ 		panic("kerneltrap: not from supervisor mode");
+-	panic("trap from kernel\n");
++	panic("trap from kerne");
+ }
+ 
+ // set up to take exceptions and traps while in the kernel.
+ void set_usertrap(void)
+ {
+-	w_stvec((uint64)uservec & ~0x3); // DIRECT
++	w_stvec(((uint64)TRAMPOLINE + (uservec - trampoline)) & ~0x3); // DIRECT
+ }
+ 
+ void set_kerneltrap(void)
+@@ -28,12 +28,13 @@ void set_kerneltrap(void)
+ // set up to take exceptions and traps while in the kernel.
+ void trap_init(void)
+ {
++	// intr_on();
+ 	set_kerneltrap();
+ }
+ 
+ void unknown_trap()
+ {
+-	errorf("unknown trap: %p, stval = %p\n", r_scause(), r_stval());
++	errorf("unknown trap: %p, stval = %p", r_scause(), r_stval());
+ 	exit(-1);
+ }
+ 
+@@ -45,7 +46,7 @@ void usertrap()
+ {
+ 	set_kerneltrap();
+ 	struct trapframe *trapframe = curr_proc()->trapframe;
+-
++	tracef("trap from user epc = %p", trapframe->epc);
+ 	if ((r_sstatus() & SSTATUS_SPP) != 0)
+ 		panic("usertrap: not from user mode");
+ 
+@@ -54,7 +55,7 @@ void usertrap()
+ 		cause &= ~(1ULL << 63);
+ 		switch (cause) {
+ 		case SupervisorTimer:
+-			tracef("time interrupt!\n");
++			tracef("time interrupt!");
+ 			set_next_timer();
+ 			yield();
+ 			break;
+@@ -74,13 +75,13 @@ void usertrap()
+ 		case InstructionPageFault:
+ 		case LoadMisaligned:
+ 		case LoadPageFault:
+-			printf("%d in application, bad addr = %p, bad instruction = %p, "
+-			       "core dumped.\n",
++			errorf("%d in application, bad addr = %p, bad instruction = %p, "
++			       "core dumped.",
+ 			       cause, r_stval(), trapframe->epc);
+ 			exit(-2);
+ 			break;
+ 		case IllegalInstruction:
+-			printf("IllegalInstruction in application, core dumped.\n");
++			errorf("IllegalInstruction in application, core dumped.");
+ 			exit(-3);
+ 			break;
+ 		default:
+@@ -100,9 +101,9 @@ void usertrapret()
+ 	struct trapframe *trapframe = curr_proc()->trapframe;
+ 	trapframe->kernel_satp = r_satp(); // kernel page table
+ 	trapframe->kernel_sp =
+-		curr_proc()->kstack + PGSIZE; // process's kernel stack
++		curr_proc()->kstack + KSTACK_SIZE; // process's kernel stack
+ 	trapframe->kernel_trap = (uint64)usertrap;
+-	trapframe->kernel_hartid = r_tp(); // hartid for cpuid()
++	trapframe->kernel_hartid = r_tp(); // unuesd
+ 
+ 	w_sepc(trapframe->epc);
+ 	// set up the registers that trampoline.S's sret will use
+@@ -115,6 +116,8 @@ void usertrapret()
+ 	w_sstatus(x);
+ 
+ 	// tell trampoline.S the user page table to switch to.
+-	// uint64 satp = MAKE_SATP(p->pagetable);
+-	userret((uint64)trapframe);
++	uint64 satp = MAKE_SATP(curr_proc()->pagetable);
++	uint64 fn = TRAMPOLINE + (userret - trampoline);
++	tracef("return to user @ %p", trapframe->epc);
++	((void (*)(uint64, uint64))fn)(TRAPFRAME, satp);
+ }
+\ No newline at end of file
+diff --git a/os/vm.c b/os/vm.c
+new file mode 100644
+index 0000000..c5df5b6
+--- /dev/null
++++ b/os/vm.c
+@@ -0,0 +1,297 @@
++#include "vm.h"
++#include "defs.h"
++#include "riscv.h"
++
++pagetable_t kernel_pagetable;
++
++extern char e_text[]; // kernel.ld sets this to end of kernel code.
++extern char trampoline[];
++
++// Make a direct-map page table for the kernel.
++pagetable_t kvmmake(void)
++{
++	pagetable_t kpgtbl;
++	kpgtbl = (pagetable_t)kalloc();
++	memset(kpgtbl, 0, PGSIZE);
++	// map kernel text executable and read-only.
++	kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)e_text - KERNBASE,
++	       PTE_R | PTE_X);
++	// map kernel data and the physical RAM we'll make use of.
++	kvmmap(kpgtbl, (uint64)e_text, (uint64)e_text, PHYSTOP - (uint64)e_text,
++	       PTE_R | PTE_W);
++	kvmmap(kpgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
++	return kpgtbl;
++}
++
++// Initialize the one kernel_pagetable
++// Switch h/w page table register to the kernel's page table,
++// and enable paging.
++void kvm_init(void)
++{
++	kernel_pagetable = kvmmake();
++	w_satp(MAKE_SATP(kernel_pagetable));
++	sfence_vma();
++	infof("enable pageing at %p", r_satp());
++}
++
++// Return the address of the PTE in page table pagetable
++// that corresponds to virtual address va.  If alloc!=0,
++// create any required page-table pages.
++//
++// The risc-v Sv39 scheme has three levels of page-table
++// pages. A page-table page contains 512 64-bit PTEs.
++// A 64-bit virtual address is split into five fields:
++//   39..63 -- must be zero.
++//   30..38 -- 9 bits of level-2 index.
++//   21..29 -- 9 bits of level-1 index.
++//   12..20 -- 9 bits of level-0 index.
++//    0..11 -- 12 bits of byte offset within the page.
++pte_t *walk(pagetable_t pagetable, uint64 va, int alloc)
++{
++	if (va >= MAXVA)
++		panic("walk");
++
++	for (int level = 2; level > 0; level--) {
++		pte_t *pte = &pagetable[PX(level, va)];
++		if (*pte & PTE_V) {
++			pagetable = (pagetable_t)PTE2PA(*pte);
++		} else {
++			if (!alloc || (pagetable = (pde_t *)kalloc()) == 0)
++				return 0;
++			memset(pagetable, 0, PGSIZE);
++			*pte = PA2PTE(pagetable) | PTE_V;
++		}
++	}
++	return &pagetable[PX(0, va)];
++}
++
++// Look up a virtual address, return the physical address,
++// or 0 if not mapped.
++// Can only be used to look up user pages.
++uint64 walkaddr(pagetable_t pagetable, uint64 va)
++{
++	pte_t *pte;
++	uint64 pa;
++
++	if (va >= MAXVA)
++		return 0;
++
++	pte = walk(pagetable, va, 0);
++	if (pte == 0)
++		return 0;
++	if ((*pte & PTE_V) == 0)
++		return 0;
++	if ((*pte & PTE_U) == 0)
++		return 0;
++	pa = PTE2PA(*pte);
++	return pa;
++}
++
++// Look up a virtual address, return the physical address,
++uint64 useraddr(pagetable_t pagetable, uint64 va)
++{
++	uint64 page = walkaddr(pagetable, va);
++	if (page == 0)
++		return 0;
++	return page | (va & 0xFFFULL);
++}
++
++// Add a mapping to the kernel page table.
++// only used when booting.
++// does not flush TLB or enable paging.
++void kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
++{
++	if (mappages(kpgtbl, va, sz, pa, perm) != 0)
++		panic("kvmmap");
++}
++
++// Create PTEs for virtual addresses starting at va that refer to
++// physical addresses starting at pa. va and size might not
++// be page-aligned. Returns 0 on success, -1 if walk() couldn't
++// allocate a needed page-table page.
++int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
++{
++	uint64 a, last;
++	pte_t *pte;
++
++	a = PGROUNDDOWN(va);
++	last = PGROUNDDOWN(va + size - 1);
++	for (;;) {
++		if ((pte = walk(pagetable, a, 1)) == 0)
++			return -1;
++		if (*pte & PTE_V) {
++			errorf("remap");
++			return -1;
++		}
++		*pte = PA2PTE(pa) | perm | PTE_V;
++		if (a == last)
++			break;
++		a += PGSIZE;
++		pa += PGSIZE;
++	}
++	return 0;
++}
++
++// Remove npages of mappings starting from va. va must be
++// page-aligned. The mappings must exist.
++// Optionally free the physical memory.
++void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
++{
++	uint64 a;
++	pte_t *pte;
++
++	if ((va % PGSIZE) != 0)
++		panic("uvmunmap: not aligned");
++
++	for (a = va; a < va + npages * PGSIZE; a += PGSIZE) {
++		if ((pte = walk(pagetable, a, 0)) == 0)
++			continue;
++		if ((*pte & PTE_V) != 0) {
++			if (PTE_FLAGS(*pte) == PTE_V)
++				panic("uvmunmap: not a leaf");
++			if (do_free) {
++				uint64 pa = PTE2PA(*pte);
++				kfree((void *)pa);
++			}
++		}
++		*pte = 0;
++	}
++}
++
++// create an empty user page table.
++// returns 0 if out of memory.
++pagetable_t uvmcreate()
++{
++	pagetable_t pagetable;
++	pagetable = (pagetable_t)kalloc();
++	if (pagetable == 0) {
++		errorf("uvmcreate: kalloc error");
++		return 0;
++	}
++	memset(pagetable, 0, PGSIZE);
++	if (mappages(pagetable, TRAMPOLINE, PAGE_SIZE, (uint64)trampoline,
++		     PTE_R | PTE_X) < 0) {
++		kfree(pagetable);
++		errorf("uvmcreate: mappages error");
++		return 0;
++	}
++	return pagetable;
++}
++
++// Recursively free page-table pages.
++// All leaf mappings must already have been removed.
++void freewalk(pagetable_t pagetable)
++{
++	// there are 2^9 = 512 PTEs in a page table.
++	for (int i = 0; i < 512; i++) {
++		pte_t pte = pagetable[i];
++		if ((pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X)) == 0) {
++			// this PTE points to a lower-level page table.
++			uint64 child = PTE2PA(pte);
++			freewalk((pagetable_t)child);
++			pagetable[i] = 0;
++		} else if (pte & PTE_V) {
++			panic("freewalk: leaf");
++		}
++	}
++	kfree((void *)pagetable);
++}
++
++/**
++ * @brief Free user memory pages, then free page-table pages.
++ *
++ * @param max_page The max vaddr of user-space.
++ */
++void uvmfree(pagetable_t pagetable, uint64 max_page)
++{
++	if (max_page > 0)
++		uvmunmap(pagetable, 0, max_page, 1);
++	freewalk(pagetable);
++}
++
++// Copy from kernel to user.
++// Copy len bytes from src to virtual address dstva in a given page table.
++// Return 0 on success, -1 on error.
++int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
++{
++	uint64 n, va0, pa0;
++
++	while (len > 0) {
++		va0 = PGROUNDDOWN(dstva);
++		pa0 = walkaddr(pagetable, va0);
++		if (pa0 == 0)
++			return -1;
++		n = PGSIZE - (dstva - va0);
++		if (n > len)
++			n = len;
++		memmove((void *)(pa0 + (dstva - va0)), src, n);
++
++		len -= n;
++		src += n;
++		dstva = va0 + PGSIZE;
++	}
++	return 0;
++}
++
++// Copy from user to kernel.
++// Copy len bytes to dst from virtual address srcva in a given page table.
++// Return 0 on success, -1 on error.
++int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
++{
++	uint64 n, va0, pa0;
++
++	while (len > 0) {
++		va0 = PGROUNDDOWN(srcva);
++		pa0 = walkaddr(pagetable, va0);
++		if (pa0 == 0)
++			return -1;
++		n = PGSIZE - (srcva - va0);
++		if (n > len)
++			n = len;
++		memmove(dst, (void *)(pa0 + (srcva - va0)), n);
++
++		len -= n;
++		dst += n;
++		srcva = va0 + PGSIZE;
++	}
++	return 0;
++}
++
++// Copy a null-terminated string from user to kernel.
++// Copy bytes to dst from virtual address srcva in a given page table,
++// until a '\0', or max.
++// Return 0 on success, -1 on error.
++int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
++{
++	uint64 n, va0, pa0;
++	int got_null = 0, len = 0;
++
++	while (got_null == 0 && max > 0) {
++		va0 = PGROUNDDOWN(srcva);
++		pa0 = walkaddr(pagetable, va0);
++		if (pa0 == 0)
++			return -1;
++		n = PGSIZE - (srcva - va0);
++		if (n > max)
++			n = max;
++
++		char *p = (char *)(pa0 + (srcva - va0));
++		while (n > 0) {
++			if (*p == '\0') {
++				*dst = '\0';
++				got_null = 1;
++				break;
++			} else {
++				*dst = *p;
++			}
++			--n;
++			--max;
++			p++;
++			dst++;
++			len++;
++		}
++
++		srcva = va0 + PGSIZE;
++	}
++	return len;
++}
+diff --git a/os/vm.h b/os/vm.h
+new file mode 100644
+index 0000000..05622ac
+--- /dev/null
++++ b/os/vm.h
+@@ -0,0 +1,19 @@
++#ifndef VM_H
++#define VM_H
++
++#include "riscv.h"
++#include "types.h"
++
++void kvm_init(void);
++void kvmmap(pagetable_t, uint64, uint64, uint64, int);
++int mappages(pagetable_t, uint64, uint64, uint64, int);
++pagetable_t uvmcreate(void);
++void uvmfree(pagetable_t, uint64);
++void uvmunmap(pagetable_t, uint64, uint64, int);
++uint64 walkaddr(pagetable_t, uint64);
++uint64 useraddr(pagetable_t, uint64);
++int copyout(pagetable_t, uint64, char *, uint64);
++int copyin(pagetable_t, char *, uint64, uint64);
++int copyinstr(pagetable_t, char *, uint64, uint64);
++
++#endif // VM_H
+\ No newline at end of file
