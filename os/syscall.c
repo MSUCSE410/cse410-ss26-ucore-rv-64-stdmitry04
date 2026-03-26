@@ -47,7 +47,7 @@ uint64 sys_gettimeofday(uint64 va, int _tz)
     k_val.usec = (cycle % CPU_FREQ) * 1000000 / CPU_FREQ;
     
     // Copy from kernel stack to user virtual address
-	if (copyout(curr_proc()->pagetable, (uint64)val, (char *)&k_val, sizeof(TimeVal)) < 0) {
+	if (copyout(curr_proc()->pagetable, va, (char *)&k_val, sizeof(TimeVal)) < 0) {
         return -1;
     }
     return 0;
