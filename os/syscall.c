@@ -58,13 +58,14 @@ uint64 sys_task_info(uint64 user_addr)
     struct proc *p = curr_proc();
     struct TaskInfo info;
     
-    info.status = p->state;
+	info.status = 2;
+    
     info.time = (get_cycle() / (CPU_FREQ / 1000)) - p->time;
+    
     for(int i = 0; i < MAX_SYSCALL_NUM; i++) {
         info.syscall_times[i] = p->syscall_times[i];
     }
     
-	// Copy from kernel stack to user virtual address
     if (copyout(p->pagetable, user_addr, (char *)&info, sizeof(struct TaskInfo)) < 0) {
         return -1;
     }
@@ -78,19 +79,19 @@ uint64 sys_mmap(uint64 start, uint64 len, int port, int flag, int fd)
     if (!PGALIGNED(start)) return -1;
     
     // port bit 0: readable, bit 1: writable, bit 2: executable
-    if ((port & ~0x7) != 0) return -1; // Other bits must be 0
-    if ((port & 0x7) == 0) return -1;  // Must have at least one valid permission
+    if ((port & ~0x7) != 0) return -1; // other bits must be 0
+    if ((port & 0x7) == 0) return -1;  // must have at least one valid permission
 
     len = PGROUNDUP(len);
     struct proc *p = curr_proc();
     
-    // Construct PTE permissions
+    // construct PTE permissions
     int perm = PTE_U | PTE_V;
     if (port & 1) perm |= PTE_R;
     if (port & 2) perm |= PTE_W;
     if (port & 4) perm |= PTE_X;
 
-    // Check if any pages in the requested range are already mapped
+    // check if any pages in the requested range are already mapped
     for (uint64 a = start; a < start + len; a += PGSIZE) {
         pte_t *pte = walk(p->pagetable, a, 0);
         if (pte != 0 && (*pte & PTE_V)) {
@@ -98,11 +99,11 @@ uint64 sys_mmap(uint64 start, uint64 len, int port, int flag, int fd)
         }
     }
 
-    // Allocate and map physical pages page-by-page
+    // allocate and map physical pages page-by-page
     for (uint64 a = start; a < start + len; a += PGSIZE) {
         void *pa = kalloc();
         if (pa == 0) {
-            return -1; // Insufficient physical memory
+            return -1; // insufficient physical memory
         }
         if (mappages(p->pagetable, a, PGSIZE, (uint64)pa, perm) != 0) {
             kfree(pa);
@@ -120,7 +121,7 @@ uint64 sys_munmap(uint64 start, uint64 len)
     len = PGROUNDUP(len);
     struct proc *p = curr_proc();
 
-    // Check if any unmapped virtual memory exists in the range
+    // check if unmapped virtual memory exists in the range
     for (uint64 a = start; a < start + len; a += PGSIZE) {
         pte_t *pte = walk(p->pagetable, a, 0);
         if (pte == 0 || (*pte & PTE_V) == 0) {
@@ -128,7 +129,7 @@ uint64 sys_munmap(uint64 start, uint64 len)
         }
     }
 
-    // Unmap the virtual memory. uvmunmap removes mappings and do_free=1 frees physical memory.
+    // unmap virtual memory. removes mappings and do_free=1 frees physical memory.
     uvmunmap(p->pagetable, start, len / PGSIZE, 1);
     
     return 0;
@@ -172,6 +173,9 @@ void syscall()
         break;
     case SYS_munmap:
         ret = sys_munmap(args[0], args[1]);
+        break;
+	case SYS_getpid:
+        ret = curr_proc()->pid;
         break;
     default:
         ret = -1;
