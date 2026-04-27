@@ -144,14 +144,30 @@ uint64 sys_wait(int pid, uint64 va)
 
 uint64 sys_spawn(uint64 va)
 {
-	// TODO: your job is to complete the sys call
-	return -1;
+	struct proc *p = curr_proc();
+	char name[200];
+	if (copyinstr(p->pagetable, name, va, sizeof(name)) < 0)
+		return -1;
+	return spawn(name);
 }
 
 uint64 sys_set_priority(long long prio)
 {
-	// TODO: your job is to complete the sys call
-	return -1;
+	return set_priority(prio);
+}
+
+uint64 sys_task_info(uint64 va)
+{
+	struct proc *p = curr_proc();
+	struct TaskInfo info;
+	info.status = p->state;
+	info.time = (get_cycle() / (CPU_FREQ / 1000)) - p->time;
+	for (int i = 0; i < MAX_SYSCALL_NUM; i++) {
+		info.syscall_times[i] = p->syscall_times[i];
+	}
+	if (copyout(p->pagetable, va, (char *)&info, sizeof(info)) < 0)
+		return -1;
+	return 0;
 }
 
 uint64 sys_openat(uint64 va, uint64 omode, uint64 _flags)
@@ -202,6 +218,9 @@ void syscall()
 			   trapframe->a3, trapframe->a4, trapframe->a5 };
 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],
 	       args[1], args[2], args[3], args[4], args[5]);
+	if (id >= 0 && id < MAX_SYSCALL_NUM) {
+		curr_proc()->syscall_times[id]++;
+	}
 	switch (id) {
 	case SYS_write:
 		ret = sys_write(args[0], args[1], args[2]);
@@ -247,8 +266,15 @@ void syscall()
 		break;
 	case SYS_unlinkat:
 	    ret = sys_unlinkat(args[0],args[1],args[2]);
+		break;
 	case SYS_spawn:
 		ret = sys_spawn(args[0]);
+		break;
+	case SYS_set_priority:
+		ret = sys_set_priority((long long)args[0]);
+		break;
+	case SYS_task_info:
+		ret = sys_task_info(args[0]);
 		break;
 	default:
 		ret = -1;

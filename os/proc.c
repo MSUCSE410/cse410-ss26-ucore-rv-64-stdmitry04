@@ -4,6 +4,7 @@
 #include "trap.h"
 #include "vm.h"
 #include "queue.h"
+#include "timer.h"
 
 struct proc pool[NPROC];
 __attribute__((aligned(16))) char kstack[NPROC][PAGE_SIZE];
@@ -89,6 +90,13 @@ found:
 	p->max_page = 0;
 	p->parent = NULL;
 	p->exit_code = 0;
+	p->time = 0;
+	for (int i = 0; i < MAX_SYSCALL_NUM; i++) {
+		p->syscall_times[i] = 0;
+	}
+	p->priority = DEFAULT_PRIORITY;
+	p->stride = 0;
+	p->pass = BIG_STRIDE / DEFAULT_PRIORITY;
 	p->pagetable = uvmcreate((uint64)p->trapframe);
 	memset(&p->context, 0, sizeof(p->context));
 	memset((void *)p->kstack, 0, KSTACK_SIZE);
@@ -132,11 +140,23 @@ void scheduler()
 		if(has_proc == 0) {
 			panic("all app are over!\n");
 		}*/
-		p = fetch_task();
-		if (p == NULL) {
+		struct proc *next = NULL;
+		for (p = pool; p < &pool[NPROC]; p++) {
+			if (p->state != RUNNABLE)
+				continue;
+			if (next == NULL ||
+			    (long)(p->stride - next->stride) < 0)
+				next = p;
+		}
+		if (next == NULL) {
 			panic("all app are over!\n");
 		}
-		tracef("swtich to proc %d", p - pool);
+		p = next;
+		tracef("swtich to proc %d (stride=%l, pass=%l)",
+		       p - pool, p->stride, p->pass);
+		if (p->time == 0)
+			p->time = get_cycle() / (CPU_FREQ / 1000);
+		p->stride += p->pass;
 		p->state = RUNNING;
 		current_proc = p;
 		swtch(&idle.context, &p->context);
@@ -162,7 +182,6 @@ void sched()
 void yield()
 {
 	current_proc->state = RUNNABLE;
-	add_task(current_proc);
 	sched();
 }
 
@@ -216,7 +235,6 @@ int fork()
 	np->trapframe->a0 = 0;
 	np->parent = p;
 	np->state = RUNNABLE;
-	add_task(np);
 	return np->pid;
 }
 
@@ -297,7 +315,6 @@ int wait(int pid, int *code)
 			return -1;
 		}
 		p->state = RUNNABLE;
-		add_task(p);
 		sched();
 	}
 }
@@ -335,4 +352,35 @@ int fdalloc(struct file *f)
 		}
 	}
 	return -1;
+}
+
+int spawn(char *name)
+{
+	struct inode *ip;
+	if ((ip = namei(name)) == 0) {
+		errorf("spawn: invalid file name %s\n", name);
+		return -1;
+	}
+	struct proc *np = allocproc();
+	if (np == NULL) {
+		iput(ip);
+		return -1;
+	}
+	struct proc *p = curr_proc();
+	np->parent = p;
+	init_stdio(np);
+	bin_loader(ip, np);
+	iput(ip);
+	np->trapframe->a0 = 0;
+	return np->pid;
+}
+
+int set_priority(long long prio)
+{
+	if (prio < 2)
+		return -1;
+	struct proc *p = curr_proc();
+	p->priority = (uint64)prio;
+	p->pass = BIG_STRIDE / p->priority;
+	return prio;
 }
