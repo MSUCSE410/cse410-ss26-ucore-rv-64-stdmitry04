@@ -164,7 +164,6 @@ void sched()
 void yield()
 {
 	current_proc->state = RUNNABLE;
-	add_task(current_proc);
 	sched();
 }
 
@@ -204,7 +203,6 @@ int fork()
 	np->trapframe->a0 = 0;
 	np->parent = p;
 	np->state = RUNNABLE;
-	add_task(np);
 	return np->pid;
 }
 
@@ -246,7 +244,6 @@ int wait(int pid, int *code)
 			return -1;
 		}
 		p->state = RUNNABLE;
-		add_task(p);
 		sched();
 	}
 }
@@ -287,7 +284,6 @@ int spawn(char *name)
 		return -1;
 	}
 	np->trapframe->a0 = 0;
-	add_task(np);
 	return np->pid;
 }
 
