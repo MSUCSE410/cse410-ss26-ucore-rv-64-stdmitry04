@@ -196,6 +196,12 @@ void ivalid(struct inode *ip)
 		ip->valid = 1;
 		if (ip->type == 0)
 			panic("ivalid: no type");
+		if (ip->nlink == 0) {
+			// Legacy disk image: dinode was written before nlink existed.
+			// Treat as a single link and persist so next access is correct.
+			ip->nlink = 1;
+			iupdate(ip);
+		}
 	}
 }
 
