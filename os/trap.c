@@ -11,7 +11,7 @@ extern char userret[], kernelvec[];
 
 void kerneltrap();
 
-// set up to take exceptions and traps while in the kernel.
+// set up to take exceptions and traps while in the kernel
 void set_usertrap()
 {
 	w_stvec(((uint64)TRAMPOLINE + (uservec - trampoline)) & ~0x3); // DIRECT
