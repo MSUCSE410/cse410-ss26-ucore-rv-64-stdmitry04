@@ -193,19 +193,156 @@ uint64 sys_close(int fd)
 	return 0;
 }
 
-int sys_fstat(int fd,uint64 stat){
-	//TODO: your job is to complete the syscall
-	return -1;
+int sys_fstat(int fd, uint64 stat)
+{
+	if (fd < 0 || fd >= FD_BUFFER_SIZE)
+		return -1;
+	struct proc *p = curr_proc();
+	struct file *f = p->files[fd];
+	if (f == NULL || f->type != FD_INODE || f->ip == NULL)
+		return -1;
+
+	ivalid(f->ip);
+
+	Stat s;
+	s.dev = f->ip->dev;
+	s.ino = f->ip->inum;
+	s.mode = (f->ip->type == T_DIR) ? DIR : FILE;
+	s.nlink = f->ip->nlink;
+	for (int i = 0; i < 7; i++)
+		s.pad[i] = 0;
+
+	if (copyout(p->pagetable, stat, (char *)&s, sizeof(s)) < 0)
+		return -1;
+	return 0;
 }
 
-int sys_linkat(int olddirfd, uint64 oldpath, int newdirfd, uint64 newpath, uint64 flags){
-	//TODO: your job is to complete the syscall
-	return -1;
+int sys_linkat(int olddirfd, uint64 oldpath, int newdirfd, uint64 newpath,
+	       uint64 flags)
+{
+	struct proc *p = curr_proc();
+	char old[MAXPATH], new[MAXPATH];
+	if (copyinstr(p->pagetable, old, oldpath, sizeof(old)) < 0)
+		return -1;
+	if (copyinstr(p->pagetable, new, newpath, sizeof(new)) < 0)
+		return -1;
+	if (strncmp(old, new, MAXPATH) == 0)
+		return -1;
+
+	struct inode *ip = namei(old);
+	if (ip == 0)
+		return -1;
+	ivalid(ip);
+
+	struct inode *dp = root_dir();
+	if (dirlink(dp, new, ip->inum) < 0) {
+		iput(ip);
+		iput(dp);
+		return -1;
+	}
+
+	ip->nlink++;
+	iupdate(ip);
+	iput(ip);
+	iput(dp);
+	return 0;
 }
 
-int sys_unlinkat(int dirfd, uint64 name, uint64 flags){
-	//TODO: your job is to complete the syscall
-	return -1;
+int sys_unlinkat(int dirfd, uint64 name, uint64 flags)
+{
+	struct proc *p = curr_proc();
+	char path[MAXPATH];
+	if (copyinstr(p->pagetable, path, name, sizeof(path)) < 0)
+		return -1;
+
+	struct inode *dp = root_dir();
+	struct inode *ip = dirlookup(dp, path, 0);
+	if (ip == 0) {
+		iput(dp);
+		return -1;
+	}
+	ivalid(ip);
+
+	if (ip->nlink < 1) {
+		iput(ip);
+		iput(dp);
+		return -1;
+	}
+	ip->nlink--;
+	iupdate(ip);
+
+	if (dirunlink(dp, path) < 0) {
+		iput(ip);
+		iput(dp);
+		return -1;
+	}
+
+	iput(ip);
+	iput(dp);
+	return 0;
+}
+
+uint64 sys_mmap(uint64 start, uint64 len, int prot)
+{
+	if ((start & (PGSIZE - 1)) != 0)
+		return -1;
+	if ((prot & ~0x7) != 0 || (prot & 0x7) == 0)
+		return -1;
+	if (len == 0)
+		return 0;
+
+	struct proc *p = curr_proc();
+	int perm = PTE_U;
+	if (prot & 0x1) perm |= PTE_R;
+	if (prot & 0x2) perm |= PTE_W;
+	if (prot & 0x4) perm |= PTE_X;
+
+	uint64 npages = PGROUNDUP(len) / PGSIZE;
+
+	for (uint64 i = 0; i < npages; i++) {
+		if (walkaddr(p->pagetable, start + i * PGSIZE) != 0)
+			return -1;
+	}
+
+	for (uint64 i = 0; i < npages; i++) {
+		uint64 va = start + i * PGSIZE;
+		void *page = kalloc();
+		if (page == 0) {
+			uvmunmap(p->pagetable, start, i, 1);
+			return -1;
+		}
+		memset(page, 0, PGSIZE);
+		if (mappages(p->pagetable, va, PGSIZE, (uint64)page, perm) != 0) {
+			kfree(page);
+			uvmunmap(p->pagetable, start, i, 1);
+			return -1;
+		}
+	}
+
+	uint64 end_pg = (start + npages * PGSIZE) / PAGE_SIZE;
+	if (end_pg > p->max_page)
+		p->max_page = end_pg;
+
+	return npages * PGSIZE;
+}
+
+int sys_munmap(uint64 start, uint64 len)
+{
+	if ((start & (PGSIZE - 1)) != 0)
+		return -1;
+	if (len == 0)
+		return 0;
+
+	struct proc *p = curr_proc();
+	uint64 npages = PGROUNDUP(len) / PGSIZE;
+
+	for (uint64 i = 0; i < npages; i++) {
+		if (walkaddr(p->pagetable, start + i * PGSIZE) == 0)
+			return -1;
+	}
+
+	uvmunmap(p->pagetable, start, npages, 1);
+	return 0;
 }
 
 extern char trap_page[];
@@ -275,6 +412,12 @@ void syscall()
 		break;
 	case SYS_task_info:
 		ret = sys_task_info(args[0]);
+		break;
+	case SYS_mmap:
+		ret = sys_mmap(args[0], args[1], args[2]);
+		break;
+	case SYS_munmap:
+		ret = sys_munmap(args[0], args[1]);
 		break;
 	default:
 		ret = -1;

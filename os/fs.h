@@ -44,13 +44,24 @@ struct superblock {
 // On-disk inode structure
 struct dinode {
 	short type; // File type
-	short pad[3];
-	// LAB4: you can reduce size of pad array and add link count below,
-	//       or you can just regard a pad as link count.
-	//       But keep in mind that you'd better keep sizeof(dinode) unchanged
+	short nlink; // Number of hard links (LAB4: reused from pad[0], dinode size unchanged)
+	short pad[2];
 	uint size; // Size of file (bytes)
 	uint addrs[NDIRECT + 1]; // Data block addresses
 };
+
+// File mode flags (used by sys_fstat)
+#define DIR 0040000
+#define FILE 0100000
+
+// File status returned by sys_fstat
+typedef struct {
+	uint64 dev;
+	uint64 ino;
+	uint32 mode;
+	uint32 nlink;
+	uint64 pad[7];
+} Stat;
 
 // Inodes per block.
 #define IPB (BSIZE / sizeof(struct dinode))
@@ -92,4 +103,5 @@ int readi(struct inode *, int, uint64, uint, uint);
 int writei(struct inode *, int, uint64, uint, uint);
 void itrunc(struct inode *);
 int dirls(struct inode *);
+int dirunlink(struct inode *, char *);
 #endif //!__FS_H__

@@ -363,6 +363,7 @@ int spawn(char *name)
 	}
 	struct proc *np = allocproc();
 	if (np == NULL) {
+		errorf("spawn: allocproc failed\n");
 		iput(ip);
 		return -1;
 	}
@@ -371,7 +372,10 @@ int spawn(char *name)
 	init_stdio(np);
 	bin_loader(ip, np);
 	iput(ip);
-	np->trapframe->a0 = 0;
+	char *argv[2];
+	argv[0] = name;
+	argv[1] = NULL;
+	np->trapframe->a0 = push_argv(np, argv);
 	return np->pid;
 }
 
