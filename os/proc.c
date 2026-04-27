@@ -88,6 +88,9 @@ found:
 	for (int i = 0; i < MAX_SYSCALL_NUM; i++) {
 		p->syscall_times[i] = 0;
 	}
+	p->priority = DEFAULT_PRIORITY;
+	p->stride = 0;
+	p->pass = BIG_STRIDE / DEFAULT_PRIORITY;
 	p->pagetable = uvmcreate((uint64)p->trapframe);
 	memset(&p->context, 0, sizeof(p->context));
 	memset((void *)p->kstack, 0, KSTACK_SIZE);
@@ -119,13 +122,23 @@ void scheduler()
 		if(has_proc == 0) {
 			panic("all app are over!\n");
 		}*/
-		p = fetch_task();
-		if (p == NULL) {
+		struct proc *next = NULL;
+		for (p = pool; p < &pool[NPROC]; p++) {
+			if (p->state != RUNNABLE)
+				continue;
+			if (next == NULL ||
+			    (long)(p->stride - next->stride) < 0)
+				next = p;
+		}
+		if (next == NULL) {
 			panic("all app are over!\n");
 		}
-		tracef("swtich to proc %d", p - pool);
+		p = next;
+		tracef("swtich to proc %d (stride=%l, pass=%l)",
+		       p - pool, p->stride, p->pass);
 		if (p->time == 0)
 			p->time = get_cycle() / (CPU_FREQ / 1000);
+		p->stride += p->pass;
 		p->state = RUNNING;
 		current_proc = p;
 		swtch(&idle.context, &p->context);
@@ -257,4 +270,33 @@ void exit(int code)
 		}
 	}
 	sched();
+}
+
+int spawn(char *name)
+{
+	int id = get_id_by_name(name);
+	if (id < 0)
+		return -1;
+	struct proc *np = allocproc();
+	if (np == NULL)
+		return -1;
+	struct proc *p = curr_proc();
+	np->parent = p;
+	if (loader(id, np) < 0) {
+		freeproc(np);
+		return -1;
+	}
+	np->trapframe->a0 = 0;
+	add_task(np);
+	return np->pid;
+}
+
+int set_priority(long long prio)
+{
+	if (prio < 2)
+		return -1;
+	struct proc *p = curr_proc();
+	p->priority = (uint64)prio;
+	p->pass = BIG_STRIDE / p->priority;
+	return prio;
 }

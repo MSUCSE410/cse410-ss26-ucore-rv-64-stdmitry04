@@ -8,6 +8,8 @@
 #define NPROC (512)
 #define FD_BUFFER_SIZE (16)
 #define MAX_SYSCALL_NUM 500
+#define BIG_STRIDE 0x7FFFFFFF
+#define DEFAULT_PRIORITY 16
 
 struct file;
 
@@ -48,6 +50,9 @@ struct proc {
 	struct file *files[FD_BUFFER_SIZE];
 	uint32 syscall_times[MAX_SYSCALL_NUM];
 	uint64 time;
+	uint64 stride;
+	uint64 pass;
+	uint64 priority;
 };
 
 struct TaskInfo {
@@ -65,6 +70,8 @@ void sched();
 void yield();
 int fork();
 int exec(char *);
+int spawn(char *);
+int set_priority(long long);
 int wait(int, int *);
 void add_task(struct proc *);
 struct proc *pop_task();
