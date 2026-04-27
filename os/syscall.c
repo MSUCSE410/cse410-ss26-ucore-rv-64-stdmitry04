@@ -121,6 +121,69 @@ uint64 sys_task_info(uint64 va)
 	return 0;
 }
 
+uint64 sys_mmap(uint64 start, uint64 len, int prot)
+{
+	if ((start & (PGSIZE - 1)) != 0)
+		return -1;
+	if ((prot & ~0x7) != 0 || (prot & 0x7) == 0)
+		return -1;
+	if (len == 0)
+		return 0;
+
+	struct proc *p = curr_proc();
+	int perm = PTE_U;
+	if (prot & 0x1) perm |= PTE_R;
+	if (prot & 0x2) perm |= PTE_W;
+	if (prot & 0x4) perm |= PTE_X;
+
+	uint64 npages = PGROUNDUP(len) / PGSIZE;
+
+	for (uint64 i = 0; i < npages; i++) {
+		if (walkaddr(p->pagetable, start + i * PGSIZE) != 0)
+			return -1;
+	}
+
+	for (uint64 i = 0; i < npages; i++) {
+		uint64 va = start + i * PGSIZE;
+		void *page = kalloc();
+		if (page == 0) {
+			uvmunmap(p->pagetable, start, i, 1);
+			return -1;
+		}
+		memset(page, 0, PGSIZE);
+		if (mappages(p->pagetable, va, PGSIZE, (uint64)page, perm) != 0) {
+			kfree(page);
+			uvmunmap(p->pagetable, start, i, 1);
+			return -1;
+		}
+	}
+
+	uint64 end_pg = (start + npages * PGSIZE) / PAGE_SIZE;
+	if (end_pg > p->max_page)
+		p->max_page = end_pg;
+
+	return 0;
+}
+
+int sys_munmap(uint64 start, uint64 len)
+{
+	if ((start & (PGSIZE - 1)) != 0)
+		return -1;
+	if (len == 0)
+		return 0;
+
+	struct proc *p = curr_proc();
+	uint64 npages = PGROUNDUP(len) / PGSIZE;
+
+	for (uint64 i = 0; i < npages; i++) {
+		if (walkaddr(p->pagetable, start + i * PGSIZE) == 0)
+			return -1;
+	}
+
+	uvmunmap(p->pagetable, start, npages, 1);
+	return 0;
+}
+
 
 extern char trap_page[];
 
@@ -174,6 +237,12 @@ void syscall()
 		break;
 	case SYS_set_priority:
 		ret = sys_set_priority((long long)args[0]);
+		break;
+	case SYS_mmap:
+		ret = sys_mmap(args[0], args[1], args[2]);
+		break;
+	case SYS_munmap:
+		ret = sys_munmap(args[0], args[1]);
 		break;
 	default:
 		ret = -1;
