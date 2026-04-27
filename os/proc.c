@@ -99,7 +99,7 @@ found:
 	p->context.sp = p->kstack + KSTACK_SIZE;
 	return p;
 }
-
+//
 // Scheduler never returns.  It loops, doing:
 //  - choose a process to run.
 //  - swtch to start running that process.
