@@ -323,7 +323,7 @@ uint64 sys_mmap(uint64 start, uint64 len, int prot)
 	if (end_pg > p->max_page)
 		p->max_page = end_pg;
 
-	return npages * PGSIZE;
+	return 0;
 }
 
 int sys_munmap(uint64 start, uint64 len)

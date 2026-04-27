@@ -50,9 +50,9 @@ struct dinode {
 	uint addrs[NDIRECT + 1]; // Data block addresses
 };
 
-// File mode flags (used by sys_fstat)
-#define DIR 0040000
-#define FILE 0100000
+// File mode flags (used by sys_fstat) — hex values matching user/ headers.
+#define DIR 0x040000
+#define FILE 0x100000
 
 // File status returned by sys_fstat
 typedef struct {
