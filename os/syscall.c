@@ -241,14 +241,47 @@ int sys_waittid(int tid)
 	return t->exit_code;
 }
 
-/*
-*	LAB5: (3) In the TA's reference implementation, here defines funtion
-*					int deadlock_detect(const int available[LOCK_POOL_SIZE],
-*						const int allocation[NTHREAD][LOCK_POOL_SIZE],
-*						const int request[NTHREAD][LOCK_POOL_SIZE])
-*				for both mutex and semaphore detect, you can also
-*				use this idea or just ignore it.
-*/
+// LAB5 Phase 3: Banker's algorithm. Returns 1 if state is unsafe (deadlock),
+// 0 if a safe execution order exists. Works for both mutex and semaphore
+// matrices since both share the (available, allocation, request) shape.
+static int deadlock_detect(const int available[LOCK_POOL_SIZE],
+			   const int allocation[NTHREAD][LOCK_POOL_SIZE],
+			   const int request[NTHREAD][LOCK_POOL_SIZE])
+{
+	int work[LOCK_POOL_SIZE];
+	int finish[NTHREAD];
+	for (int i = 0; i < LOCK_POOL_SIZE; i++)
+		work[i] = available[i];
+	for (int t = 0; t < NTHREAD; t++)
+		finish[t] = 0;
+
+	int progress = 1;
+	while (progress) {
+		progress = 0;
+		for (int t = 0; t < NTHREAD; t++) {
+			if (finish[t])
+				continue;
+			int can = 1;
+			for (int i = 0; i < LOCK_POOL_SIZE; i++) {
+				if (request[t][i] > work[i]) {
+					can = 0;
+					break;
+				}
+			}
+			if (can) {
+				for (int i = 0; i < LOCK_POOL_SIZE; i++)
+					work[i] += allocation[t][i];
+				finish[t] = 1;
+				progress = 1;
+			}
+		}
+	}
+	for (int t = 0; t < NTHREAD; t++) {
+		if (!finish[t])
+			return 1;
+	}
+	return 0;
+}
 
 int sys_mutex_create(int blocking)
 {
@@ -257,8 +290,9 @@ int sys_mutex_create(int blocking)
 		errorf("fail to create mutex: out of resource");
 		return -1;
 	}
-	// LAB5: (4-1) You may want to maintain some variables for detect here
 	int mutex_id = m - curr_proc()->mutex_pool;
+	// One instance per mutex.
+	curr_proc()->mutex_available[mutex_id] = 1;
 	debugf("create mutex %d", mutex_id);
 	return mutex_id;
 }
@@ -269,9 +303,25 @@ int sys_mutex_lock(int mutex_id)
 		errorf("Unexpected mutex id %d", mutex_id);
 		return -1;
 	}
-	// LAB5: (4-1) You may want to maintain some variables for detect
-	//       or call your detect algorithm here
-	mutex_lock(&curr_proc()->mutex_pool[mutex_id]);
+	struct proc *p = curr_proc();
+	int tid = curr_thread() - p->threads;
+
+	if (p->deadlock_detect_enabled) {
+		p->mutex_request[tid][mutex_id]++;
+		if (deadlock_detect(p->mutex_available, p->mutex_allocation,
+				    p->mutex_request)) {
+			p->mutex_request[tid][mutex_id]--;
+			return -0xDEAD;
+		}
+	}
+
+	mutex_lock(&p->mutex_pool[mutex_id]);
+
+	if (p->deadlock_detect_enabled) {
+		p->mutex_request[tid][mutex_id]--;
+		p->mutex_allocation[tid][mutex_id]++;
+		p->mutex_available[mutex_id]--;
+	}
 	return 0;
 }
 
@@ -281,8 +331,16 @@ int sys_mutex_unlock(int mutex_id)
 		errorf("Unexpected mutex id %d", mutex_id);
 		return -1;
 	}
-	// LAB5: (4-1) You may want to maintain some variables for detect here
-	mutex_unlock(&curr_proc()->mutex_pool[mutex_id]);
+	struct proc *p = curr_proc();
+	int tid = curr_thread() - p->threads;
+
+	if (p->deadlock_detect_enabled &&
+	    p->mutex_allocation[tid][mutex_id] > 0) {
+		p->mutex_allocation[tid][mutex_id]--;
+		p->mutex_available[mutex_id]++;
+	}
+
+	mutex_unlock(&p->mutex_pool[mutex_id]);
 	return 0;
 }
 
@@ -293,8 +351,8 @@ int sys_semaphore_create(int res_count)
 		errorf("fail to create semaphore: out of resource");
 		return -1;
 	}
-	// LAB5: (4-2) You may want to maintain some variables for detect here
 	int sem_id = s - curr_proc()->semaphore_pool;
+	curr_proc()->sem_available[sem_id] = res_count;
 	debugf("create semaphore %d", sem_id);
 	return sem_id;
 }
@@ -306,8 +364,16 @@ int sys_semaphore_up(int semaphore_id)
 		errorf("Unexpected semaphore id %d", semaphore_id);
 		return -1;
 	}
-	// LAB5: (4-2) You may want to maintain some variables for detect here
-	semaphore_up(&curr_proc()->semaphore_pool[semaphore_id]);
+	struct proc *p = curr_proc();
+	int tid = curr_thread() - p->threads;
+
+	if (p->deadlock_detect_enabled) {
+		if (p->sem_allocation[tid][semaphore_id] > 0)
+			p->sem_allocation[tid][semaphore_id]--;
+		p->sem_available[semaphore_id]++;
+	}
+
+	semaphore_up(&p->semaphore_pool[semaphore_id]);
 	return 0;
 }
 
@@ -318,9 +384,25 @@ int sys_semaphore_down(int semaphore_id)
 		errorf("Unexpected semaphore id %d", semaphore_id);
 		return -1;
 	}
-	// LAB5: (4-2) You may want to maintain some variables for detect
-	//       or call your detect algorithm here
-	semaphore_down(&curr_proc()->semaphore_pool[semaphore_id]);
+	struct proc *p = curr_proc();
+	int tid = curr_thread() - p->threads;
+
+	if (p->deadlock_detect_enabled) {
+		p->sem_request[tid][semaphore_id]++;
+		if (deadlock_detect(p->sem_available, p->sem_allocation,
+				    p->sem_request)) {
+			p->sem_request[tid][semaphore_id]--;
+			return -0xDEAD;
+		}
+	}
+
+	semaphore_down(&p->semaphore_pool[semaphore_id]);
+
+	if (p->deadlock_detect_enabled) {
+		p->sem_request[tid][semaphore_id]--;
+		p->sem_allocation[tid][semaphore_id]++;
+		p->sem_available[semaphore_id]--;
+	}
 	return 0;
 }
 
