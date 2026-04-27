@@ -5,6 +5,8 @@
 #include "syscall_ids.h"
 #include "timer.h"
 #include "trap.h"
+#include "proc.h"
+#include "vm.h"
 
 uint64 sys_write(int fd, uint64 va, uint len)
 {
@@ -103,6 +105,20 @@ uint64 sys_set_priority(long long prio){
     return -1;
 }
 
+uint64 sys_task_info(uint64 va)
+{
+	struct proc *p = curr_proc();
+	struct TaskInfo info;
+	info.status = p->state;
+	info.time = (get_cycle() / (CPU_FREQ / 1000)) - p->time;
+	for (int i = 0; i < MAX_SYSCALL_NUM; i++) {
+		info.syscall_times[i] = p->syscall_times[i];
+	}
+	if (copyout(p->pagetable, va, (char *)&info, sizeof(info)) < 0)
+		return -1;
+	return 0;
+}
+
 
 extern char trap_page[];
 
@@ -114,6 +130,9 @@ void syscall()
 			   trapframe->a3, trapframe->a4, trapframe->a5 };
 	tracef("syscall %d args = [%x, %x, %x, %x, %x, %x]", id, args[0],
 	       args[1], args[2], args[3], args[4], args[5]);
+	if (id >= 0 && id < MAX_SYSCALL_NUM) {
+		curr_proc()->syscall_times[id]++;
+	}
 	switch (id) {
 	case SYS_write:
 		ret = sys_write(args[0], args[1], args[2]);
@@ -147,6 +166,9 @@ void syscall()
 		break;
 	case SYS_spawn:
 		ret = sys_spawn(args[0]);
+		break;
+	case SYS_task_info:
+		ret = sys_task_info(args[0]);
 		break;
 	default:
 		ret = -1;
